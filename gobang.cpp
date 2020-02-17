@@ -11,7 +11,7 @@
 
 using std::vector;
 
-Gobang::Gobang() : _board(new Board), _AI(new AI) {}
+Gobang::Gobang() : _board(new Actual_Board), _AI(new AI) {}
 
 Gobang::~Gobang()
 {

@@ -12,21 +12,52 @@ struct Coord
 
 bool operator==(const Coord &c1, const Coord &c2);
 
-class Board
+class Board_Base
 {
 public:
-  Board();
-  void init();
-  bool occupy(int player, Coord coord);
-  void remove(Coord coord);
-  bool valid_coord(Coord coord) const;
-  int coord_trans(Coord coord) const;
-  const std::vector<int> *board() const;
-  int step() const;
+  virtual ~Board_Base() = default;
+  virtual bool occupy(int player, Coord coord) = 0;
 
-private:
+  inline const std::vector<int> *board() const { return &occupied; }
+  inline int step() const { return step_count; }
+  inline bool valid_coord(Coord coord) const
+  {
+    return coord.x < 1 || coord.x > 19 || coord.y < 1 || coord.y > 19 ? false : true;
+  }
+  inline int coord_trans(Coord coord) const { return (coord.y - 1) * 19 + coord.x - 1; }
+
+protected:
+  Board_Base();
   int step_count{0};
   std::vector<int> occupied;
+};
+
+class Simple_Board : public Board_Base
+{
+public:
+  Simple_Board();
+  bool occupy(int player, Coord coord) override;
+};
+
+class Test_Board : public Simple_Board
+{
+public:
+  Test_Board();
+  Test_Board(const Simple_Board &simple);
+  void remove(Coord coord);
+};
+
+class Actual_Board : public Simple_Board
+{
+public:
+  Actual_Board();
+  void init();
+  bool occupy(int player, Coord coord) override;
+
+  inline Coord latest() const { return latest_move; }
+
+private:
+  Coord latest_move{0, 0};
 };
 
 #endif // BOARDMODEL_H

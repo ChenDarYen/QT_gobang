@@ -1,6 +1,7 @@
 #include "board.h"
 using std::vector;
 
+// Coord
 Coord::Coord(int x, int y) : x(x), y(y) {}
 
 bool operator==(const Coord &c1, const Coord &c2)
@@ -8,16 +9,13 @@ bool operator==(const Coord &c1, const Coord &c2)
   return c1.x == c2.x && c1.y == c2.y;
 }
 
-Board::Board() : occupied(361, -1) {}
+// Board_base
+Board_Base::Board_Base() : occupied(361, -1) {} // 19 * 19 = 361
 
-void Board::init()
-{
-  step_count = 0;
-  for(auto it = occupied.begin(), end = occupied.end(); it != end; ++it)
-    *it = -1;
-}
+// Simple_Board
+Simple_Board::Simple_Board() : Board_Base() {}
 
-bool Board::occupy(int player, Coord coord)
+bool Simple_Board::occupy(int player, Coord coord)
 {
   if(!valid_coord(coord) || occupied[coord_trans(coord)] != -1)
     return false;
@@ -30,7 +28,16 @@ bool Board::occupy(int player, Coord coord)
   return true;
 }
 
-void Board::remove(Coord coord)
+// Test_Board
+Test_Board::Test_Board() : Simple_Board() {}
+
+Test_Board::Test_Board(const Simple_Board &simple) : Simple_Board()
+{
+  occupied = *simple.board();
+  step_count = simple.step();
+}
+
+void Test_Board::remove(Coord coord)
 {
   if(valid_coord(coord))
     if (occupied[coord_trans(coord)] != -1)
@@ -40,26 +47,23 @@ void Board::remove(Coord coord)
     }
 }
 
-bool Board::valid_coord(Coord coord) const
+// Actual_Board
+Actual_Board::Actual_Board() : Simple_Board() {}
+
+void Actual_Board::init()
 {
-  if(coord.x < 1 || coord.x > 19 || coord.y < 1 || coord.y > 19)
+  latest_move.x = latest_move.y = 0;
+  step_count = 0;
+  for(auto it = occupied.begin(), end = occupied.end(); it != end; ++it)
+    *it = -1;
+}
+
+bool Actual_Board::occupy(int player, Coord coord)
+{
+  if(!Simple_Board::occupy(player, coord))
     return false;
+
+  latest_move = coord;
 
   return true;
 }
-
-int Board::coord_trans(Coord coord) const
-{
-  return (coord.y - 1) * 19 + coord.x - 1;
-}
-
-const vector<int> *Board::board() const
-{
-  return &occupied;
-}
-
-int Board::step() const
-{
-  return step_count;
-}
-

@@ -21,26 +21,30 @@ class AI
 {
 public:
   AI(unsigned depth = 4, unsigned breadth = 50);
-  Coord select_point(Board *board);
+  Coord select_point(Actual_Board *board);
 
 private:
-  int _nega_scout(Board *board, int alpha, int beta, unsigned depth, Coord coord = {0, 0});
-  bool _terminal_test(Board *board, Coord coord) const;
-  bool _terminal_test_dir(Board *board, Coord coord, Direction dir) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
-  inline int _player(Board *board) const;
-  std::vector<Action> _actions(Board *board) const;
-  int _coord_heuristic(Board *board, Coord coord) const;
-  int _coord_heuristic_dir(Board *board, Coord coord, Direction dir) const;
-  int _critical(Board *board, Coord coord, Direction dir, bool connec) const;
-  int _heuristic(Board *board);
-  int _analysis_shape(Board *board, Coord coord, Direction dir,
+  int _nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord = {0, 0});
+  bool _terminal_test(Test_Board *board, Coord coord) const;
+  bool _terminal_test_dir(Test_Board *board, Coord coord, Direction dir) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
+  std::vector<Action> _actions(Test_Board *board) const;
+  int _coord_heuristic(Test_Board *board, Coord coord) const;
+  int _coord_heuristic_dir(Test_Board *board, Coord coord, Direction dir) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
+  int _critical(Test_Board *board, Coord coord, Direction dir, bool connec) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
+  int _heuristic(Test_Board *board);
+  int _analysis_shape(Test_Board *board, Coord coord, Direction dir,
                 int *blank_prefix, bool *player_prefix, bool *opponent_prefix);
-  Chess_Shape _analysis_shape_line(Board *board, Coord coord, Direction dir, int blank_prefix) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
+  Chess_Shape _analysis_shape_line(Test_Board *board, Coord coord, Direction dir, int blank_prefix) const; // dir can only be {1, 0}, {0 ,1}, {1, 1}, {-1, 1}
   unsigned _max_depth;
   unsigned _max_breadth;
   Coord _selection{0, 0};
   std::vector<std::vector<int>> _player_shapes;
   std::vector<std::vector<int>> _opponent_shapes;
+
+  inline int _player(Test_Board *board) const
+  {
+    return board->step() % 2;
+  }
 };
 
 

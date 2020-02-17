@@ -29,7 +29,7 @@ private:
   bool _player_tern{false};
   int _computer{0};
   Coord _new_coord{0, 0};
-  Board *_board{nullptr};
+  Actual_Board *_board{nullptr};
   AI *_AI{nullptr};
 
   // views

@@ -14,13 +14,14 @@ AI::AI(unsigned depth, unsigned breadth) : _max_depth(depth), _max_breadth(bread
                                            _player_shapes(3, vector<int>(2, 0)),
                                            _opponent_shapes(2, vector<int>(2, 0)) {}
 
-Coord AI::select_point(Board *board)
+Coord AI::select_point(Actual_Board *board)
 {
-  _nega_scout(board, MIN, MAX, 1);
+  Test_Board test_board(*board); // creat a test board by actual board
+  _nega_scout(&test_board, MIN, MAX, 1);
   return _selection;
 }
 
-int AI::_nega_scout(Board *board, int alpha, int beta, unsigned depth, Coord coord)
+int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
 {
   if(depth > 1 && _terminal_test(board, coord)) // in depth 1, terminal test is not necessary
     return -10000 + depth; // consider the urgentness
@@ -58,7 +59,7 @@ int AI::_nega_scout(Board *board, int alpha, int beta, unsigned depth, Coord coo
   return v;
 }
 
-bool AI::_terminal_test(Board *board, Coord coord) const
+bool AI::_terminal_test(Test_Board *board, Coord coord) const
 {
   // vertical connection
   if(_terminal_test_dir(board, coord, {1, 0}))
@@ -79,7 +80,7 @@ bool AI::_terminal_test(Board *board, Coord coord) const
   return false;
 }
 
-bool AI::_terminal_test_dir(Board *board, Coord coord, Direction dir) const
+bool AI::_terminal_test_dir(Test_Board *board, Coord coord, Direction dir) const
 {
   int player = (board->step() - 1) % 2;
 
@@ -109,12 +110,7 @@ bool AI::_terminal_test_dir(Board *board, Coord coord, Direction dir) const
          back_coord.x - front_coord.x - 1 >= 5;
 }
 
-inline int AI::_player(Board *board) const
-{
-  return board->step() % 2;
-}
-
-vector<Action> AI::_actions(Board *board) const
+vector<Action> AI::_actions(Test_Board *board) const
 {
   vector<Action> actions;
   if(!board->step())
@@ -149,19 +145,19 @@ vector<Action> AI::_actions(Board *board) const
   return actions;
 }
 
-int AI::_coord_heuristic(Board *board, Coord coord) const
+int AI::_coord_heuristic(Test_Board *board, Coord coord) const
 {
   return _coord_heuristic_dir(board, coord, {1, 0}) + _coord_heuristic_dir(board, coord, {0, 1}) +
          _coord_heuristic_dir(board, coord, {1, 1}) + _coord_heuristic_dir(board, coord, {-1, 1});
 }
 
-int AI::_coord_heuristic_dir(Board *board, Coord coord, Direction dir) const
+int AI::_coord_heuristic_dir(Test_Board *board, Coord coord, Direction dir) const
 {
   // consider both block and connect chesses
   return _critical(board, coord, dir, false) + _critical(board, coord, dir, true);
 }
 
-int AI::_critical(Board *board, Coord coord, Direction dir, bool connec) const
+int AI::_critical(Test_Board *board, Coord coord, Direction dir, bool connec) const
 {
   int player = _player(board), target = !connec ? player : player == 1 ? 0 : 1;
   int i = 0, amount = 0, tail = 1;
@@ -212,7 +208,7 @@ int AI::_critical(Board *board, Coord coord, Direction dir, bool connec) const
   return !connec ? score : score ? score + diff : 0; // connec is more important then block
 }
 
-int AI::_heuristic(Board *board)
+int AI::_heuristic(Test_Board *board)
 {
   // init data of chess shape
   for(int i = 0; i < 3; ++i)
@@ -335,7 +331,7 @@ int AI::_heuristic(Board *board)
   return h;
 }
 
-int AI::_analysis_shape(Board *board, Coord coord, Direction dir,
+int AI::_analysis_shape(Test_Board *board, Coord coord, Direction dir,
                          int *blank_prefix, bool *player_prefix, bool *opponent_prefix)
 {
   int player = (board->step() - 1) % 2;
@@ -378,7 +374,7 @@ int AI::_analysis_shape(Board *board, Coord coord, Direction dir,
   return 0; // return 0 means the heuristic is not already be determined
 }
 
-Chess_Shape AI::_analysis_shape_line(Board *board, Coord coord, Direction dir, int blank_prefix) const
+Chess_Shape AI::_analysis_shape_line(Test_Board *board, Coord coord, Direction dir, int blank_prefix) const
 {
   int player = (*board->board())[board->coord_trans(coord)];
   int opponent = player == 1 ? 0 : 1;
