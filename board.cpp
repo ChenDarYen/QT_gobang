@@ -52,18 +52,7 @@ Actual_Board::Actual_Board() : Simple_Board() {}
 
 void Actual_Board::init()
 {
-  latest_move.x = latest_move.y = 0;
   step_count = 0;
   for(auto it = occupied.begin(), end = occupied.end(); it != end; ++it)
     *it = -1;
-}
-
-bool Actual_Board::occupy(int player, Coord coord)
-{
-  if(!Simple_Board::occupy(player, coord))
-    return false;
-
-  latest_move = coord;
-
-  return true;
 }

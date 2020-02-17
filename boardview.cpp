@@ -91,6 +91,41 @@ void BoardView::paintEvent(QPaintEvent*)
                           12 * W);
     }
   }
+
+  // mark latest move
+
+  Coord AI_latest, player_latest;
+  _model->latest_move(&AI_latest, &player_latest);
+
+  if(AI_latest.x != 0)
+  {
+    QPen highlight(Qt::red, W * 2, Qt::SolidLine);
+    painter.setPen(highlight);
+
+    painter.drawLine((.5 + AI_latest.x - 1) * _lattice_width - 3 * W,
+                     (.5 + AI_latest.y - 1) * _lattice_width,
+                     (.5 + AI_latest.x - 1) * _lattice_width + 3 * W,
+                     (.5 + AI_latest.y - 1) * _lattice_width);
+    painter.drawLine((.5 + AI_latest.x - 1) * _lattice_width,
+                     (.5 + AI_latest.y - 1) * _lattice_width - 3 * W,
+                     (.5 + AI_latest.x - 1) * _lattice_width,
+                     (.5 + AI_latest.y - 1) * _lattice_width + 3 * W);
+  }
+
+  if(player_latest.x != 0)
+  {
+    QPen highlight(Qt::darkGreen, W * 2, Qt::SolidLine);
+    painter.setPen(highlight);
+
+    painter.drawLine((.5 + player_latest.x - 1) * _lattice_width - 3 * W,
+                     (.5 + player_latest.y - 1) * _lattice_width,
+                     (.5 + player_latest.x - 1) * _lattice_width + 3 * W,
+                     (.5 + player_latest.y - 1) * _lattice_width);
+    painter.drawLine((.5 + player_latest.x - 1) * _lattice_width,
+                     (.5 + player_latest.y - 1) * _lattice_width - 3 * W,
+                     (.5 + player_latest.x - 1) * _lattice_width,
+                     (.5 + player_latest.y - 1) * _lattice_width + 3 * W);
+  }
 }
 
 void BoardView::mousePressEvent(QMouseEvent *e)

@@ -52,12 +52,6 @@ class Actual_Board : public Simple_Board
 public:
   Actual_Board();
   void init();
-  bool occupy(int player, Coord coord) override;
-
-  inline Coord latest() const { return latest_move; }
-
-private:
-  Coord latest_move{0, 0};
 };
 
 #endif // BOARDMODEL_H

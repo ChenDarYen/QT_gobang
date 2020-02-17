@@ -42,6 +42,9 @@ void Gobang::play(int winner)
   _window->showModeDialog(&mode, content);
 
   _board->init();
+  _latest_AI_move.x = _latest_AI_move.y = 0;
+  _latest_player_move.x = _latest_player_move.y = 0;
+
   _board_view->update();
 
   _computer = mode == 0 ? 1 : 0;
@@ -55,6 +58,12 @@ void Gobang::play(int winner)
 const vector<int> *Gobang::board() const
 {
   return _board->board();
+}
+
+void Gobang::latest_move(Coord *AI_move, Coord *player_move) const
+{
+  *AI_move = _latest_AI_move;
+  *player_move = _latest_player_move;
 }
 
 void Gobang::place_chess(bool is_AI, Coord coord)
@@ -74,6 +83,12 @@ void Gobang::place_chess(bool is_AI, Coord coord)
   }
 
   _board->occupy(is_AI ? _computer : !_computer, coord);
+
+  if(is_AI)
+    _latest_AI_move = coord;
+  else
+    _latest_player_move = coord;
+
   _board_view->repaint();
 
   if(_victory(coord))
