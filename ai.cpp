@@ -10,13 +10,15 @@ using std::string;
 using std::max;
 int MAX = 9998, MIN = -MAX;
 
+Action::Action(int p, Coord coord) : priority(p), coord(coord) {}
+
 AI::AI(unsigned depth, unsigned breadth) : _max_depth(depth), _max_breadth(breadth),
                                            _player_shapes(3, vector<int>(2, 0)),
                                            _opponent_shapes(2, vector<int>(2, 0)) {}
 
 Coord AI::select_point(Actual_Board *board)
 {
-  Test_Board test_board(*board); // creat a test board by actual board
+  Test_Board test_board(_player(board), *board); // creat a test board by actual board
   _nega_scout(&test_board, MIN, MAX, 1);
   return _selection;
 }
@@ -42,6 +44,7 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
       w = -_nega_scout(board, -beta, -alpha, depth + 1, a.coord);
 
     board->remove(a.coord);
+
     if(w > v)
     {
       v = w;
@@ -113,6 +116,8 @@ bool AI::_terminal_test_dir(Test_Board *board, Coord coord, Direction dir) const
 vector<Action> AI::_actions(Test_Board *board) const
 {
   vector<Action> actions;
+
+  // when board is empty
   if(!board->step())
   {
     Action act;
@@ -121,91 +126,23 @@ vector<Action> AI::_actions(Test_Board *board) const
     return actions;
   }
 
+  // get valuable actions
   for(int x = 1; x <= 19; ++x)
     for(int y = 1; y <= 19; ++y)
-      if((*board->board())[board->coord_trans({x, y})] == -1)
-      {
-        int h = _coord_heuristic(board, {x, y});
-        if(h)
-        {
-          Action act;
-          act.priority = h;
-          act.coord = {x, y};
-          actions.push_back(act);
-        }
-      }
+      if(int p = board->get_heuristic({x, y}))
+        actions.emplace_back(Action(p, {x, y}));
 
+  // sort actions by priority
   std::sort(actions.begin(), actions.end(),
             [](const Action &lhs, const Action &rhs)
             {
               return lhs.priority > rhs.priority ? true : false;
             });
+
+  // limit the amout of actions
   if(actions.size() > _max_breadth)
     actions.resize(_max_breadth);
   return actions;
-}
-
-int AI::_coord_heuristic(Test_Board *board, Coord coord) const
-{
-  return _coord_heuristic_dir(board, coord, {1, 0}) + _coord_heuristic_dir(board, coord, {0, 1}) +
-         _coord_heuristic_dir(board, coord, {1, 1}) + _coord_heuristic_dir(board, coord, {-1, 1});
-}
-
-int AI::_coord_heuristic_dir(Test_Board *board, Coord coord, Direction dir) const
-{
-  // consider both block and connect chesses
-  return _critical(board, coord, dir, false) + _critical(board, coord, dir, true);
-}
-
-int AI::_critical(Test_Board *board, Coord coord, Direction dir, bool connec) const
-{
-  int player = _player(board), target = !connec ? player : player == 1 ? 0 : 1;
-  int i = 0, amount = 0, tail = 1;
-  int score = 0;
-  Coord stunt_coord = coord - dir;
-  while(i++ < 5 && tail == 1)
-  {
-    if(!board->valid_coord(stunt_coord) ||
-       (*board->board())[board->coord_trans(stunt_coord)] == target)
-      tail = -1;
-    else if((*board->board())[board->coord_trans(stunt_coord)] == -1)
-      tail = 0;
-    else
-    {
-      ++amount;
-      stunt_coord = stunt_coord - dir;
-    }
-  }
-  score += amount ? amount * 2 + tail : 0;
-
-  i = amount = 0;
-  tail = 1;
-  stunt_coord = coord + dir;
-  while(i++ < 5 && tail == 1)
-  {
-    if (!board->valid_coord(stunt_coord) ||
-        (*board->board())[board->coord_trans(stunt_coord)] == target)
-      tail = -1;
-    else if((*board->board())[board->coord_trans(stunt_coord)] == -1)
-      tail = 0;
-    else
-    {
-      ++amount;
-      stunt_coord = stunt_coord + dir;
-    }
-  }
-  score += amount ? amount * 2 + tail : 0;
-
-  int diff = 1;
-  if(score >= 6) // stronger or equal to 活三
-  {
-    score *= 1000;
-    diff = 500;
-  }
-  else
-    score *= 2;
-
-  return !connec ? score : score ? score + diff : 0; // connec is more important then block
 }
 
 int AI::_heuristic(Test_Board *board)
@@ -296,7 +233,7 @@ int AI::_heuristic(Test_Board *board)
     }
   }
 
-  // staic all chess shapes on the board
+  // consider all chess shapes on the board
   // player has 活四 or has 沖四 more then one
   if(_player_shapes[2][1] || _player_shapes[2][0] > 1)
     return 9030;
