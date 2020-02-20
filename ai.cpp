@@ -8,18 +8,19 @@ using std::make_shared;
 using std::vector;
 using std::string;
 using std::max;
-int MAX = 9998, MIN = -MAX;
+using std::min;
+int INF = 9998;
 
 Action::Action(int p, Coord coord) : priority(p), coord(coord) {}
 
-AI::AI(unsigned depth, unsigned breadth) : _max_depth(depth), _max_breadth(breadth),
-                                           _player_shapes(3, vector<int>(2, 0)),
-                                           _opponent_shapes(2, vector<int>(2, 0)) {}
+AI::AI(unsigned depth) : _max_depth(depth),
+                         _player_shapes(3, vector<int>(2, 0)),
+                         _opponent_shapes(2, vector<int>(2, 0)) {}
 
 Coord AI::select_point(Actual_Board *board)
 {
   Test_Board test_board(_player(board), *board); // creat a test board by actual board
-  _nega_scout(&test_board, MIN, MAX, 1);
+  _nega_scout(&test_board, -INF, INF, 1);
   return _selection;
 }
 
@@ -29,13 +30,14 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
     return -10000 + depth; // consider the urgentness
 
   if(depth > _max_depth)
-    return -_heuristic(board) + depth;
+    return -_heuristic(board);
+
+  _breadth = 40 * ((_max_depth - depth + 1) / static_cast<double>(_max_depth));
 
   Coord selec;
-  int v = MIN;
+  int v = -INF;
   int b = beta;
-  vector<Action> actions = _actions(board);
-  for(auto a : actions)
+  for(auto &&a : _actions(board))
   {
     board->occupy(_player(board), a.coord);
 
@@ -50,8 +52,15 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
       v = w;
       selec = a.coord;
     }
+
+    /*
+     * beta is initialized by INF = 9998 in depth 1
+     * so if AI find an act lead to terminal, the pruning occur
+     * since exis no better move
+    */
     if(v >= beta)
       break;
+
     alpha = max(alpha, v);
     b = alpha + 1;
   }
@@ -136,12 +145,12 @@ vector<Action> AI::_actions(Test_Board *board) const
   std::sort(actions.begin(), actions.end(),
             [](const Action &lhs, const Action &rhs)
             {
-              return lhs.priority > rhs.priority ? true : false;
+              return lhs.priority > rhs.priority;
             });
 
-  // limit the amout of actions
-  if(actions.size() > _max_breadth)
-    actions.resize(_max_breadth);
+  // limit the amount of actions
+  if(actions.size() > _breadth)
+    actions.resize(_breadth);
   return actions;
 }
 
@@ -248,22 +257,22 @@ int AI::_heuristic(Test_Board *board)
     return 9000;
 
   int h = 0;
-  if(_player_shapes[2][0])
+  if(_player_shapes[2][0]) // 沖四
     h += 2000;
 
-  if(_player_shapes[1][1] > 1)
-    h += 500;
-  else if(_player_shapes[1][1])
+  if(_player_shapes[1][1] > 1) // double 活三
+    h += 5000;
+  else if(_player_shapes[1][1]) // single 活三
     h += 100;
 
   if(_opponent_shapes[1][1] > 1)
-    h -= 2000;
+    h -= 5000;
   else if(_opponent_shapes[1][1])
-    h -= 500;
+    h -= 2500;
 
-  h += (_player_shapes[1][0] - _opponent_shapes[1][0]) * 10;
-  h += (_player_shapes[0][1] - _opponent_shapes[0][1]) * 4;
-  h += (_player_shapes[0][0] - _opponent_shapes[0][0]) * 2;
+  h += (_player_shapes[1][0] - _opponent_shapes[1][0]) * 10; // 眠三
+  h += (_player_shapes[0][1] - _opponent_shapes[0][1]) * 4; // 活二
+  h += (_player_shapes[0][0] - _opponent_shapes[0][0]) * 2; // 眠二
 
   return h;
 }
