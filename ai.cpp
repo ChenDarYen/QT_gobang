@@ -3,17 +3,21 @@
 #include <string>
 #include <cmath>
 
+#include <QDebug>
 using std::shared_ptr;
 using std::make_shared;
 using std::vector;
 using std::string;
 using std::max;
 using std::min;
-int INF = 9998;
+
+const int INF = 10000;
+const int WINNING_POINT = 8000;
 
 Action::Action(int p, Coord coord) : priority(p), coord(coord) {}
 
 AI::AI(unsigned depth) : _max_depth(depth),
+                         _killer_depth(depth + 6),
                          _player_shapes(3, vector<int>(2, 0)),
                          _opponent_shapes(2, vector<int>(2, 0)) {}
 
@@ -27,7 +31,7 @@ Coord AI::select_point(Actual_Board *board)
 int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
 {
   if(depth > 1 && _terminal_test(board, coord)) // in depth 1, terminal test is not necessary
-    return -10000 + depth; // consider the urgentness
+    return -INF + depth; // consider the urgentness
 
   if(depth > _max_depth)
     return -_heuristic(board);
@@ -37,38 +41,108 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
   Coord selec;
   int v = -INF;
   int b = beta;
+  int s = 0, p = 0, n = 1;
   for(auto &&a : _actions(board))
   {
     board->occupy(_player(board), a.coord);
 
     int w = -_nega_scout(board, -b, -alpha, depth + 1, a.coord);
-    if(alpha < w && w < beta && beta != b)
-      w = -_nega_scout(board, -beta, -alpha, depth + 1, a.coord);
+
+    /*
+     * we need to check if the search with a narrow window prunes to much
+     * if it realy does, search with the regular window again
+     *
+     * when depth is _max_depth
+     * and the game is still has suspence, try to search a killer
+    */
+    if(depth != _max_depth)
+    {
+      if(alpha < w && w < beta &&
+         beta != b)
+        w = -_nega_scout(board, -beta, -alpha, depth + 1, a.coord);
+    }
+    else if(abs(w) < WINNING_POINT &&
+            alpha < -WINNING_POINT && beta > -WINNING_POINT)
+    {
+      if(int w_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
+         w_killer < -WINNING_POINT)
+      {
+        qDebug() << "voila: " << a.coord.x << ", " << a.coord.y << ": " << -w_killer;
+        w = w_killer;
+      }
+    }
+
+    if(depth == _max_depth - 1 && abs(w) < WINNING_POINT &&
+       alpha < -WINNING_POINT && beta > -WINNING_POINT)
+      if(int w_opponent_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
+         w_opponent_killer < -WINNING_POINT)
+      {
+        qDebug() << "oops: " << a.coord.x << ", " << a.coord.y << ": " << w_opponent_killer;
+        w = w_opponent_killer + 1000;
+      }
 
     board->remove(a.coord);
+
+    if(depth == 1)
+      qDebug() << n << ". " << a.coord.x << ", " << a.coord.y << ": " << w;
 
     if(w > v)
     {
       v = w;
+      s = n;
+      p = w;
       selec = a.coord;
     }
 
     /*
-     * beta is initialized by INF = 9998 in depth 1
-     * so if AI find an act lead to terminal, the pruning occur
-     * since exis no better move
+     * if v is greater or equal to 9000
+     * it means this move lead winnimg
+     * since it's not necessary to check others moves, prune it!
     */
-    if(v >= beta)
+    if(v >= beta || (depth == 1 && v >= 9000))
       break;
 
     alpha = max(alpha, v);
     b = alpha + 1;
+    ++n;
   }
 
   if(depth == 1)
+  {
+    qDebug() << s << ": " << p;
     _selection = selec;
+  }
 
   return v;
+}
+
+int AI::_nega_scout_killer(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
+{
+  if(_terminal_test(board, coord))
+    return -10000 + depth;
+
+  if(depth > _killer_depth)
+    return -_heuristic(board);
+
+  int v = -INF;
+  for(auto &&a : _actions_killer(board))
+  {
+    board->occupy(_player(board), a.coord);
+
+    int w = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
+
+    board->remove(a.coord);
+
+    if(w > v)
+      v = w;
+
+    if(v >= beta || v >= 9000)
+      break;
+
+    alpha = max(alpha, v);
+  }
+
+  return v != -INF ? v : 0; // in killer search 0 is harmless
 }
 
 bool AI::_terminal_test(Test_Board *board, Coord coord) const
@@ -151,6 +225,28 @@ vector<Action> AI::_actions(Test_Board *board) const
   // limit the amount of actions
   if(actions.size() > _breadth)
     actions.resize(_breadth);
+  return actions;
+}
+
+vector<Action> AI::_actions_killer(Test_Board *board) const
+{
+  vector<Action> actions;
+
+  /*
+   * in killer search we only consider
+   * those points forming chess shape stronger or equal to 活三
+   * whoose heuristic is at least 400
+  */
+  for(int x = 1; x <= 19; ++x)
+    for(int y = 1; y <= 19; ++y)
+      if(int p = board->get_heuristic({x, y}); p >= 400)
+        actions.emplace_back(Action(p, {x, y}));
+
+  std::sort(actions.begin(), actions.end(),
+            [](const Action &lhs, const Action &rhs)
+            {
+              return lhs.priority > rhs.priority;
+            });
   return actions;
 }
 
@@ -263,15 +359,15 @@ int AI::_heuristic(Test_Board *board)
   if(_player_shapes[1][1] > 1) // double 活三
     h += 5000;
   else if(_player_shapes[1][1]) // single 活三
-    h += 100;
+    h += 1000;
 
   if(_opponent_shapes[1][1] > 1)
     h -= 5000;
   else if(_opponent_shapes[1][1])
     h -= 2500;
 
-  h += (_player_shapes[1][0] - _opponent_shapes[1][0]) * 10; // 眠三
-  h += (_player_shapes[0][1] - _opponent_shapes[0][1]) * 4; // 活二
+  h += (_player_shapes[1][0] - _opponent_shapes[1][0]) * 100; // 眠三
+  h += (_player_shapes[0][1] - _opponent_shapes[0][1]) * 80; // 活二
   h += (_player_shapes[0][0] - _opponent_shapes[0][0]) * 2; // 眠二
 
   return h;

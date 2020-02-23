@@ -20,7 +20,7 @@ BoardView::BoardView(QWidget *parent) : QWidget(parent), _model(Gobang::get())
   _model->setBoardView(this);
 
   QPalette palette;
-  palette.setBrush(QPalette::Background,  QBrush(QColor(216, 156, 72)));
+  palette.setBrush(QPalette::Window,  QBrush(QColor(216, 156, 72)));
 
   setPalette(palette);
 

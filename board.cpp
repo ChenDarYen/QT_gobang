@@ -375,7 +375,7 @@ int Test_Board::_shape_h(int shape) const
 
     case 1203202:
     case 2023021:
-      return 400; // 活二
+      return 100; // 活二
 
     case 1200321:
     case 1230021:
