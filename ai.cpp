@@ -2,6 +2,7 @@
 #include "direction.h"
 #include "zobrist.h"
 #include "gobang.h"
+#include "testboard.h"
 #include <string>
 #include <cmath>
 

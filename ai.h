@@ -7,6 +7,7 @@
 #include "board.h"
 
 class Zobrist;
+class Test_Board;
 struct Direction;
 
 struct Action

@@ -28,6 +28,7 @@ SOURCES += \
     mainwindow.cpp \
     modedialog.cpp \
     placeevent.cpp \
+    testboard.cpp \
     zobrist.cpp
 
 HEADERS += \
@@ -40,6 +41,7 @@ HEADERS += \
     mainwindow.h \
     modedialog.h \
     placeevent.h \
+    testboard.h \
     zobrist.h
 
 FORMS += \
