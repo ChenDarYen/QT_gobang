@@ -1,5 +1,7 @@
 #include "ai.h"
 #include "direction.h"
+#include "zobrist.h"
+#include "gobang.h"
 #include <string>
 #include <cmath>
 
@@ -12,29 +14,55 @@ using std::max;
 using std::min;
 
 const int INF = 10000;
-const int WINNING_POINT = 8000;
+const int WINNING_POINT = 9000;
 
 Action::Action(int p, Coord coord) : priority(p), coord(coord) {}
 
 AI::AI(unsigned depth) : _max_depth(depth),
                          _killer_depth(depth + 6),
                          _player_shapes(3, vector<int>(2, 0)),
-                         _opponent_shapes(2, vector<int>(2, 0)) {}
+                         _opponent_shapes(2, vector<int>(2, 0)),
+                         _zobrist(new Zobrist) {}
+
+AI::~AI()
+{
+  delete _zobrist;
+}
 
 Coord AI::select_point(Actual_Board *board)
 {
-  Test_Board test_board(_player(board), *board); // creat a test board by actual board
+  // creat a test board by actual board
+  Test_Board test_board(_player(board), *board);
+
+  // update key of Zobrist hashing
+  Coord latest_self_move, latest_opponent_move;
+  Gobang::get()->latest_move(&latest_self_move, &latest_opponent_move);
+  _zobrist->update(true, latest_self_move);
+  _zobrist->update(false, latest_opponent_move);
+
+  // search a point
   _nega_scout(&test_board, -INF, INF, 1);
   return _selection;
 }
 
 int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
 {
-  if(depth > 1 && _terminal_test(board, coord)) // in depth 1, terminal test is not necessary
-    return -INF + depth; // consider the urgentness
+  if(depth > 1)// in depth 1, check repeat and terminal test is not necessary
+  {
+    if(auto p = _cache.find(_zobrist->key());
+       p != _cache.end())
+    {
+      auto [score, steps] = (*p).second;
+      return score > 0 ? score + (board->step() - depth - steps + 1) :
+                         score - (board->step() - depth - steps + 1);
+    }
+
+    else if(_terminal_test(board, coord))
+      return -INF + depth; // consider the urgentness
+  }
 
   if(depth > _max_depth)
-    return -_heuristic(board);
+    return -_heuristic(board, depth);
 
   _breadth = 40 * ((_max_depth - depth + 1) / static_cast<double>(_max_depth));
 
@@ -42,9 +70,12 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
   int v = -INF;
   int b = beta;
   int s = 0, p = 0, n = 1;
+  bool is_self = depth % 2;
   for(auto &&a : _actions(board))
   {
+    // update key of Zobrist hashing when occupy or remove
     board->occupy(_player(board), a.coord);
+    _zobrist->update(is_self, a.coord);
 
     int w = -_nega_scout(board, -b, -alpha, depth + 1, a.coord);
 
@@ -66,25 +97,24 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
     {
       if(int w_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
          w_killer < -WINNING_POINT)
-      {
-        qDebug() << "voila: " << a.coord.x << ", " << a.coord.y << ": " << -w_killer;
         w = w_killer;
-      }
     }
 
     if(depth == _max_depth - 1 && abs(w) < WINNING_POINT &&
        alpha < -WINNING_POINT && beta > -WINNING_POINT)
       if(int w_opponent_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
          w_opponent_killer < -WINNING_POINT)
-      {
-        qDebug() << "oops: " << a.coord.x << ", " << a.coord.y << ": " << w_opponent_killer;
-        w = w_opponent_killer + 1000;
-      }
+        w = w_opponent_killer; // consider the urgentness
 
-    board->remove(a.coord);
+    // only save nonsuspence situations
+    if(abs(w) >= WINNING_POINT)
+      _cache[_zobrist->key()] = {-w, board->step() - depth}; // need to take negative again
 
     if(depth == 1)
       qDebug() << n << ". " << a.coord.x << ", " << a.coord.y << ": " << w;
+
+    board->remove(a.coord);
+    _zobrist->update(is_self, a.coord);
 
     if(w > v)
     {
@@ -118,20 +148,33 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
 
 int AI::_nega_scout_killer(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
 {
+  if(auto p = _cache.find(_zobrist->key());
+     p != _cache.end())
+  {
+    auto [score, steps] = (*p).second;
+    return score > 0 ? score + (board->step() - depth - steps + 1) :
+                       score - (board->step() - depth - steps + 1);
+  }
+
   if(_terminal_test(board, coord))
     return -10000 + depth;
 
   if(depth > _killer_depth)
-    return -_heuristic(board);
+    return -_heuristic(board, depth);
 
   int v = -INF;
   for(auto &&a : _actions_killer(board))
   {
     board->occupy(_player(board), a.coord);
+    _zobrist->update(depth % 2, a.coord);
 
     int w = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
 
+    if(abs(w) >= WINNING_POINT)
+      _cache[_zobrist->key()] = {-w, board->step() - depth};
+
     board->remove(a.coord);
+    _zobrist->update(depth % 2, a.coord);
 
     if(w > v)
       v = w;
@@ -250,7 +293,7 @@ vector<Action> AI::_actions_killer(Test_Board *board) const
   return actions;
 }
 
-int AI::_heuristic(Test_Board *board)
+int AI::_heuristic(Test_Board *board, unsigned depth)
 {
   // init data of chess shape
   for(int i = 0; i < 3; ++i)
@@ -273,7 +316,7 @@ int AI::_heuristic(Test_Board *board)
     {
       int h = _analysis_shape(board, {x, y}, {1, 0}, &blank_preifix, &player_prefix, &opponent_prefix);
       if(h)
-        return h;
+        return -INF + depth + 1;
     }
   }
 
@@ -286,7 +329,7 @@ int AI::_heuristic(Test_Board *board)
     {
       int h = _analysis_shape(board, {x, y}, {0, 1}, &blank_preifix, &player_prefix, &opponent_prefix);
       if(h)
-        return h;
+        return -INF + depth + 1;
     }
   }
 
@@ -310,7 +353,7 @@ int AI::_heuristic(Test_Board *board)
       }
       int h = _analysis_shape(board, {x, y}, {1, 1}, &blank_preifix, &player_prefix, &opponent_prefix);
       if(h)
-        return h;
+        return -INF + depth + 1;
     }
   }
 
@@ -334,23 +377,23 @@ int AI::_heuristic(Test_Board *board)
       }
       int h = _analysis_shape(board, {x, y}, {-1, 1}, &blank_preifix, &player_prefix, &opponent_prefix);
       if(h)
-        return h;
+        return -INF + depth + 1;
     }
   }
 
   // consider all chess shapes on the board
   // player has 活四 or has 沖四 more then one
   if(_player_shapes[2][1] || _player_shapes[2][0] > 1)
-    return 9030;
+    return INF - depth - 2;
   // player has 沖四 and 活三
   if(_player_shapes[2][0] && _player_shapes[1][1])
-    return 9020;
+    return INF - depth - 4;
   // player do not have 沖四, but opponent has 活三
   if(!_player_shapes[2][0] && _opponent_shapes[1][1])
-    return -9010;
+    return -INF + depth + 3;
   // player has 活三 more then one, and opponent do not have 活三 or 眠三
   if(_player_shapes[1][1] > 1 && !_opponent_shapes[1][0] && !_opponent_shapes[1][1])
-    return 9000;
+    return INF - depth - 4;
 
   int h = 0;
   if(_player_shapes[2][0]) // 沖四
@@ -373,7 +416,7 @@ int AI::_heuristic(Test_Board *board)
   return h;
 }
 
-int AI::_analysis_shape(Test_Board *board, Coord coord, Direction dir,
+bool AI::_analysis_shape(Test_Board *board, Coord coord, Direction dir,
                          int *blank_prefix, bool *player_prefix, bool *opponent_prefix)
 {
   int player = (board->step() - 1) % 2;
@@ -403,7 +446,7 @@ int AI::_analysis_shape(Test_Board *board, Coord coord, Direction dir,
       Chess_Shape shape = _analysis_shape_line(board, coord, dir, *blank_prefix);
 
       if(shape.amount == 4) // if opponent has 活四 or 沖四, the player must loose
-        return shape.alive ? -9050 : -9040;
+        return true;
 
       if(shape.amount > 1)
         ++_opponent_shapes[shape.amount - 2][shape.alive];

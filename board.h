@@ -20,11 +20,15 @@ public:
 
   inline const std::vector<int> *board() const { return &occupied; }
   inline int step() const { return step_count; }
-  inline bool valid_coord(Coord coord) const
+
+  static inline bool valid_coord(Coord coord)
   {
     return coord.x < 1 || coord.x > 19 || coord.y < 1 || coord.y > 19 ? false : true;
   }
-  inline int coord_trans(Coord coord) const { return (coord.y - 1) * 19 + coord.x - 1; }
+  static inline int coord_trans(Coord coord)
+  {
+    return (coord.y - 1) * 19 + coord.x - 1;
+  }
 
 protected:
   Board_Base();

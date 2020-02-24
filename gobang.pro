@@ -4,6 +4,8 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++17
 
+INCLUDEPATH += /usr/local/include
+
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
 # depend on your compiler). Please consult the documentation of the
@@ -25,7 +27,8 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     modedialog.cpp \
-    placeevent.cpp
+    placeevent.cpp \
+    zobrist.cpp
 
 HEADERS += \
     ai.h \
@@ -36,7 +39,8 @@ HEADERS += \
     gobang.h \
     mainwindow.h \
     modedialog.h \
-    placeevent.h
+    placeevent.h \
+    zobrist.h
 
 FORMS += \
     mainwindow.ui \
