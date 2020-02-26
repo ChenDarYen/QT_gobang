@@ -6,7 +6,6 @@
 #include <string>
 #include <cmath>
 
-#include <QDebug>
 using std::shared_ptr;
 using std::make_shared;
 using std::vector;
@@ -70,7 +69,6 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
   Coord selec;
   int v = -INF;
   int b = beta;
-  int s = 0, p = 0, n = 1;
   bool is_self = depth % 2;
   for(auto &&a : _actions(board))
   {
@@ -111,17 +109,12 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
     if(abs(w) >= WINNING_POINT)
       _cache[_zobrist->key()] = {-w, board->step() - depth}; // need to take negative again
 
-    if(depth == 1)
-      qDebug() << n << ". " << a.coord.x << ", " << a.coord.y << ": " << w;
-
     board->remove(a.coord);
     _zobrist->update(is_self, a.coord);
 
     if(w > v)
     {
       v = w;
-      s = n;
-      p = w;
       selec = a.coord;
     }
 
@@ -135,14 +128,10 @@ int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coor
 
     alpha = max(alpha, v);
     b = alpha + 1;
-    ++n;
   }
 
   if(depth == 1)
-  {
-    qDebug() << s << ": " << p;
     _selection = selec;
-  }
 
   return v;
 }
