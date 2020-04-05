@@ -1,0 +1,6 @@
+<RCC>
+    <qresource>
+        <file>model/model_100.pt</file>
+        <file>model/model_50.pt</file>
+    </qresource>
+</RCC>

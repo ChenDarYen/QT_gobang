@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins">
+        <file>model/model_100.pt</file>
+    </qresource>
+</RCC>
