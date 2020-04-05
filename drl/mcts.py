@@ -5,7 +5,7 @@ import sys
 import os
 
 C_PUCT = .1
-SIMULATION_ITER = 400
+SIMULATION_ITER = 500
 
 
 class Node:
@@ -44,23 +44,30 @@ class Node:
 
         if train:
             np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-            # explore under linear combination of dirichlet distribution
-            length = len(actions_pool)
-            p = .8*np.array(actions_dist) + .2*np.random.dirichlet(.2*np.ones(length))
-            action_idx = np.random.choice(length, p=p)
+            action_idx = np.random.choice(len(actions_pool), p=actions_dist)
             action = actions_pool[action_idx]
         else:
             action = actions_pool[int(np.argmax(actions_dist))]
 
         return action, dist
 
-    def policy(self):  # choose action under UCB
+    def policy(self, add_noise=False):  # choose action under UCB
         ucb_max = -sys.maxsize
         choose_edge = None
+
+        if add_noise:
+            noise = np.random.dirichlet(.2*np.ones(len(self.edges_away)))
+        else:
+            noise = np.zeros(len(self.edges_away))
+
+        i = 0
         for edge in self.edges_away.values():
-            if edge.ucb() > ucb_max:
-                ucb_max = edge.ucb()
+            ucb = edge.ucb(noise[i])
+            i += 1
+            if ucb > ucb_max:
+                ucb_max = ucb
                 choose_edge = edge
+
         choose_node, expand = choose_edge.get()
         return choose_edge.action, choose_node, expand
 
@@ -87,9 +94,13 @@ class Edge:
         self.value += value
         self.node_from.backup(-value)
 
-    def ucb(self):
+    def ucb(self, noise=0):
         q = self.value/self.counter if self.counter else 0
-        return q + C_PUCT * self.priority * np.sqrt(self.node_from.counter) / (self.counter+1)
+
+        if noise:
+            return q + C_PUCT * (.8*self.priority + .2*noise) * np.sqrt(self.node_from.counter) / (self.counter+1)
+        else:
+            return q + C_PUCT * self.priority * np.sqrt(self.node_from.counter) / (self.counter + 1)
 
 
 class MCTS:
@@ -124,7 +135,12 @@ class MCTS:
                         node.add_child(action=(action[0], action[1]),
                                        priority=state_prob[0, action[0]*15 + action[1]])
 
-                choose_action, node, expand = node.policy()
+                # add noise when select in root node
+                if node == self.curr_node:
+                    choose_action, node, expand = node.policy(True)
+                else:
+                    choose_action, node, expand = node.policy()
+
                 end, state = self.simulate_game.place_chess(choose_action)
 
             if end:
@@ -147,6 +163,7 @@ class MCTS:
 
             end, state = self.main_game.place_chess(action)
             self.curr_node = self.step(action)
+            print('{} place'.format(self.index))
 
         if self.main_game.steps % 2 == 1:
             winner = 1

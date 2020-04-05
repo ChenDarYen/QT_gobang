@@ -78,9 +78,8 @@ class NeuralNetwork:
         if state_file_path:
             self.net.load_state_dict(torch.load(state_file_path))
 
-        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=LR)
+        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=LR, momentum=.9, weight_decay=1e-4)
         self.loss_mse = nn.MSELoss()
-        self.loss_cross_entropy = nn.CrossEntropyLoss()
 
         # each experience contains board, distribution, player, winner
         self.memory = np.zeros((MEMORY_CAPACITY, 15*15*2+2), dtype=np.float32)
@@ -118,13 +117,15 @@ class NeuralNetwork:
         value, prob = self.net(batch_input)
         batch_output = nn.functional.softmax(prob, dim=1)
 
-        loss_mse = self.loss_mse(value, batch_winner)
-        loss_cross = torch.mean(torch.sum(batch_output*batch_dist, 1))
-        loss = loss_mse - loss_cross
+        mse = self.loss_mse(value, batch_winner)
+        entropy_cross_loss = -torch.mean(torch.sum(batch_dist * torch.log(batch_output), 1))
+        loss = mse + entropy_cross_loss
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+        return mse.item(), entropy_cross_loss.item()
 
     def eval(self, x):
         with torch.no_grad():

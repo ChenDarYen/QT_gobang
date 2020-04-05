@@ -1,6 +1,7 @@
 import mcts
 import network
 import utils
+import pickle
 from multiprocessing import Pool, Manager
 from multiprocessing.managers import BaseManager
 from functools import partial
@@ -10,7 +11,23 @@ STATE_SAVE_FOLDER = 'state/'
 BASE = 0
 
 
-def train(_, network, lock):
+class LossRecord:
+    def __init__(self):
+        self.record = []
+
+    def add(self, record):
+        self.record.append(record)
+
+    def save(self, path):
+        file = open(path, 'wb')
+        pickle.dump(self.record, file)
+        file.close()
+
+    def size(self):
+        return len(self.record)
+
+
+def train(_, network, lock, loss_record):
     game_index = network.count()
     print('{} game start'.format(game_index))
 
@@ -23,12 +40,18 @@ def train(_, network, lock):
     lock.acquire()
     print('{} learn start'.format(game_index))
 
+    mse_total, cross_entropy_total = 0, 0
     for _ in range(100):
-        network.learn()
+        mse, cross_entropy = network.learn()
+        mse_total += mse
+        cross_entropy_total += cross_entropy
+    loss_record.add([mse_total/100, cross_entropy_total/100])
+    print([mse_total/100, cross_entropy_total/100])
 
-    if game_index % 50 == 0:
+    if loss_record.size() % 50 == 0:
         network.save_state("{}state_{}.pkl".format(STATE_SAVE_FOLDER, game_index+int(BASE)))
         network.save_memory("memory.npy")
+        loss_record.save("loss_record_{}.pkl")
 
     print('{} learn end'.format(game_index))
     lock.release()
@@ -46,16 +69,21 @@ def train(_, network, lock):
 
 if __name__ == '__main__':
     BaseManager.register('NN', callable=network.NeuralNetwork)
+    BaseManager.register('LossRecord', callable=LossRecord)
     manager = BaseManager()
     manager.start()
 
     neural_network = manager.NN()
+    loss_record = manager.LossRecord()
     # neural_network.memory = np.load(memory.npy)
 
     m = Manager()
     lock = m.Lock()
 
-    partial_train = partial(train, network=neural_network, lock=lock)
+    partial_train = partial(train,
+                            network=neural_network,
+                            lock=lock,
+                            loss_record=loss_record)
 
     pool = Pool()
     pool.map(partial_train, range(500))
