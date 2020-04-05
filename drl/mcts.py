@@ -27,27 +27,30 @@ class Node:
         if self.edge_from:
             self.edge_from.backup(value)
 
-    def distribution(self, train=True):
+    def distribution(self, step):
+        # set the temperature, which is used to controls the degree of exploration
+        if step < 20:
+            tau = 1
+        else:
+            tau = 1/step
+
         dist = np.zeros((15, 15))
         actions_pool = []
         actions_dist = []
         for edge in self.edges_away.values():
             if edge.counter != 0:
-                dist[edge.action[0], edge.action[1]] = edge.counter
+                tmp = np.float_power(edge.counter, 1 / tau)
+                dist[edge.action[0], edge.action[1]] = tmp
                 actions_pool.append(edge.action)
-                actions_dist.append(edge.counter)
+                actions_dist.append(tmp)
 
         denominator = np.sum(dist)
         dist /= denominator
-
         actions_dist = [value/denominator for value in actions_dist]
 
-        if train:
-            np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-            action_idx = np.random.choice(len(actions_pool), p=actions_dist)
-            action = actions_pool[action_idx]
-        else:
-            action = actions_pool[int(np.argmax(actions_dist))]
+        np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
+        action_idx = np.random.choice(len(actions_pool), p=actions_dist)
+        action = actions_pool[action_idx]
 
         return action, dist
 
@@ -154,15 +157,17 @@ class MCTS:
         states = []
         dists = []
         state = np.zeros((15, 15))
+        step = 0
         while not end:
             self.simulation()
 
             states.append(state)
-            action, dist = self.curr_node.distribution()
+            action, dist = self.curr_node.distribution(step)
             dists.append(dist)
 
             end, state = self.main_game.place_chess(action)
             self.curr_node = self.step(action)
+            step += 1
             print('{} place'.format(self.index))
 
         if self.main_game.steps % 2 == 1:
