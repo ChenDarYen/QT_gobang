@@ -7,259 +7,316 @@
 
 簡介
 ---
-在足夠好的 order 之下使用 Nega Scout Search 的五子棋 AI 程式。  
-設計算殺搭配 Zobrist hashing table 在可接受的時間內完成六層全局搜尋加上六層算殺，提升棋力。  
-使用 QT 做 GUI 開發，達成簡易的 MVC 模式。
+模仿 AlphaGo Zero 訓練電腦學習五子棋，取代 v1 中使用 Nega Scout Search 的 AI。  
+主要用 Pytorch 建構神經網路和訓練，為了加速訓練使用了 multiprocessing。  
+c++ 使用 libtorch 調用訓練後輸出的模型。
 
-版本
+主要架構包含了 MCTS(Monte Carlo tree search) 和 Deep Neural Network，這裡的 DNN 輸出當前局面的預測價值 (value) 和動作機率 (policy)。  
+透過 DNN 主導的 MCTS 不斷的 self-play 蒐集 training data 訓練 DNN 優化兩個輸出目標。
+
+<p align="center">
+  <img src="https://github.com/ChenDarYen/gobang_drl/blob/master/structure.png" width="700px">
+</p>
+
+DNN
 ---
-### v1.2
+這裡設計的神經網路輸入為 3 \* 15  \* 15 的矩陣，包含了一個當前局面自己的棋子，一個對手的棋子，和一個代表了當前的 player。 
+先透過數個卷積層提取盤面的 features 後再分別丟進兩個各別的全連接層輸出 value 和 policy。
 
-> 使用 Zobrist hashing table 避免重複搜尋，提升效率。  
-> 提升效率後，便能於合理時間內加入算殺，大幅提升搜尋深度。
-  
-Zobrist hashing 使用 _self 和 _opponent 兩個 vector 各自儲存棋盤大小個隨機數，最好能是 64bit 以避免碰撞，這裡只使用了 32bit。_key 同樣初始唯一隨機數。  
-update 函數內使用 XOR 能使 _key 只與盤面相關，和落子順序無關。  
+#### Experience Replay
+Self-play 中的每一步都可以生成一筆訓練資料，儲存進容量限制的 memory 中。  
+訓練資料的形式為 (s<sub>t</sub>, π<sub>t</sub>, p<sub>t</sub>, z<sub>t</sub>)，s<sub>t</sub> 代表當時的局面，π<sub>t</sub> 代表當時 MCTS 的動作機率分佈，p<sub>t</sub> 代表當前的玩家，z<sub>t</sub> 代表當局結束時的贏家，黑勝為 1，白勝為 0。
 
-當搜尋結束時局面仍未定，進行更深度的算殺，只考慮能形成比相等或更強於活三落點。  
-一共進行兩次，一次為自己尋找，一次提防對手。
+可以發現一局中的連續的狀態與狀態只相差了一顆棋子卻擁有相同的贏家，這造成了高度的 correlation（相似的狀態有同樣的回歸目標），容易導致價值函數出現 overfitting。  
+因此我們採用 experience replay，隨機抽取固定個數的訓練資料生成一個訓練 batch，以降低 correlation。  
+另外因為價值函數和策略函數共用了一部份的 NN，也讓 overfitting 不再出現。
 
-###### zobrist.h
-```c++
-class Zobrist
-{
-public:
-  Zobrist();
-  void update(int is_self, Coord coord);
 
-  inline int key() const { return _key; }
-  std::vector<uint32_t> _self;
-  std::vector<uint32_t> _opponent;
+#### Loss Function
+Loss funciton 為 MSE 和 cross-entropy loss 的合。
 
-private:
-  uint32_t _key;
-};
-```
-###### zobrist.cpp
-```c++
-using boost::mt19937;
-using boost::uniform_int;
-using boost::variate_generator;
+<p align="center">
+  <img src="https://github.com/ChenDarYen/gobang_drl/blob/master/loss_function.png" width="300px">
+</p>
 
-Zobrist::Zobrist()
-{
-  mt19937 generator;
-  uniform_int<uint32_t>dist(1, 0xffffffff);
-  variate_generator<mt19937&, uniform_int<uint32_t>> random(generator, dist);
+第三項為 L2 正則項，這裡設置常數 c 為 1e-4。  
+MSE 用於優化 value，cross-entropy loss 用於優化 policy。
 
-  for(int i = 0; i < 361; ++i)
-  {
-    _self.push_back(random());
-    _opponent.push_back(random());
-  }
+MCTS
+---
+MCTS 包括了四個步驟：
 
-  _key = random();
-}
+<ul>
+  <li>Selection 選擇：從根節點開始持續選取子結點直到抵達葉節點，葉節點可能為終局或子節點尚未展開。</li>
+  <li>Expansion 展開：從葉節點的子節點中選取數個展開。</li>
+  <li>Simulaion 模擬：從根節點開始迅速的模擬出結果。</li>
+  <li>Backpropagation 反向傳播：用模擬結果更新路徑上的節點訊息。</li>
+</ul>
 
-void Zobrist::update(int is_self, Coord coord)
-{
-  if(Board_Base::valid_coord(coord))
-    _key ^= (is_self ? _self[Board_Base::coord_trans(coord)] :
-                       _opponent[Board_Base::coord_trans(coord)]);
-}
-```
-更新 nega scout search：
-+ 只儲存勝負已訂的盤面，因為勝負未定的盤面分數會隨搜尋深度而不能預期。  
-+ 搜尋時先確認當前盤面是否已被搜尋過且勝負已定。  
-+ 每變更一步更新 _key 一次。
-+ 在深度為 _max_depth 和 _max_depth - 1 時如勝負未定，分別進行一次算殺。
+#### UCT
+再處理 MAB 上選擇了 UCT(Upper Confidence Bound for tree) ，比 ε-greedy 更能充分運用已取得的統計訊息。其值為邊（action）的 Q 值和其 UCB 的加總。  
+Q 值為過往 MCTS 每一次反向傳播的平均值。  
+UCB 代表了對 Q 值的信賴上界，信賴上界越大表示越沒有信心確認 Q 值的準確，也將更容易被選到。
 
-###### ai.cpp
-```c++
-int AI::_nega_scout(Test_Board *board, int alpha, int beta, unsigned depth, Coord coord)
-{
-  if(depth > 1)// in depth 1, check repeat and terminal test is not necessary
-  {
-    if(auto p = _cache.find(_zobrist->key());
-       p != _cache.end())
-    {
-      auto [score, steps] = (*p).second;
-      return score > 0 ? score + (board->step() - depth - steps + 1) :
-                         score - (board->step() - depth - steps + 1);
-    }
+<p align="center">
+  <img src="https://github.com/ChenDarYen/gobang_drl/blob/master/ucb.png" width="300px">
+</p>
 
-    else if(_terminal_test(board, coord))
-      return -INF + depth; // consider the urgentness
-  }
+N 表示過往被選擇的次數，次數越低 UCB 越高。  
+P 為動作被選擇的先驗機率，在根節點上會加上一些 noise 增加探索的廣度。
 
-  if(depth > _max_depth)
-    return -_heuristic(board, depth);
+#### Expansion
+在 Zero 中強調不使用額外資訊的強化學習，因此 tree-policy 簡化直接展開所有可能的子節點。  
+擴充時會以神經網路給出的機率初始化動作的 prior。
 
-  _breadth = 40 * ((_max_depth - depth + 1) / static_cast<double>(_max_depth));
+#### Backpropagation
+如果模擬的終點為終局，backup 的值為 1。  
+如果終點為尚未 expansion 的節點，backup 值由神經網路給出。
 
-  Coord selec;
-  int v = -INF;
-  int b = beta;
-  bool is_self = depth % 2;
-  for(auto &&a : _actions(board))
-  {
-    // update key of Zobrist hashing when occupy or remove
-    board->occupy(_player(board), a.coord);
-    _zobrist->update(is_self, a.coord);
+#### Policy
+在經過一定程度的模擬後（這裡固定為 400 次），policy 將使用蒐集到的統計值給出選點。
 
-    int w = -_nega_scout(board, -b, -alpha, depth + 1, a.coord);
+於 s<sub>0</sub> 的狀態下選擇 a 的機率為:
 
-    /*
-     * we need to check if the search with a narrow window prunes to much
-     * if it realy does, search with the regular window again
-     *
-     * when depth is _max_depth or _max_depth - 1
-     * and the game is still has suspence, try to search a killer
-    */
-    if(depth != _max_depth)
-    {
-      if(alpha < w && w < beta &&
-         beta != b)
-        w = -_nega_scout(board, -beta, -alpha, depth + 1, a.coord);
-    }
-    else if(abs(w) < WINNING_POINT &&
-            alpha < -WINNING_POINT && beta > -WINNING_POINT)
-    {
-      if(int w_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
-         w_killer < -WINNING_POINT)
-        w = w_killer;
-    }
+<p align="center">
+  <img src="https://github.com/ChenDarYen/gobang_drl/blob/master/policy.png" width="300px">
+</p>
 
-    if(depth == _max_depth - 1 && abs(w) < WINNING_POINT &&
-       alpha < -WINNING_POINT && beta > -WINNING_POINT)
-      if(int w_opponent_killer = -_nega_scout_killer(board, -beta, -alpha, depth + 1, a.coord);
-         w_opponent_killer < -WINNING_POINT)
-        w = w_opponent_killer; // consider the urgentness
+τ 代表了控制探索程度的溫度，這裡每局的前 20 步固定為 1，超過的設為 1 / 步數。
 
-    // only save nonsuspence situations
-    if(abs(w) >= WINNING_POINT)
-      _cache[_zobrist->key()] = {-w, board->step() - depth}; // need to take negative again
+程式碼
+---
+下面是部分的程式碼。
+#### 神經網路
+BaseModel 為價值函數和策略函數共用的部分。
 
-    board->remove(a.coord);
-    _zobrist->update(is_self, a.coord);
+###### network.py
+```python
+class Model(BaseModel, ValueModel, ProbModel):
+    def __init__(self):
+        super().__init__()
 
-    if(w > v)
-    {
-      v = w;
-      selec = a.coord;
-    }
+    def forward(self, x):
+        x = BaseModel.forward(self, x).view(-1, 120*11*11)
+        return ValueModel.forward(self, x), ProbModel.forward(self, x)
 
-    /*
-     * if v is greater or equal to 9000
-     * it means this move lead winnimg
-     * since it's not necessary to check others moves, prune it!
-    */
-    if(v >= beta || (depth == 1 && v >= 9000))
-      break;
 
-    alpha = max(alpha, v);
-    b = alpha + 1;
-  }
+class NeuralNetwork:
+    def __init__(self, state_file_path=None):
+        self.net = Model()
+        if state_file_path:
+            self.net.load_state_dict(torch.load(state_file_path))
 
-  if(depth == 1)
-    _selection = selec;
+        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=LR, momentum=.9, weight_decay=1e-4)
+        self.loss_mse = nn.MSELoss()
 
-  return v;
-}
+        # each experience contains board, distribution, player, winner
+        self.memory = np.zeros((MEMORY_CAPACITY, 15*15*2+2), dtype=np.float32)
+        self.memory_counter = 0
+
+    def store_experience(self, board, dist, player, winner):
+        index = self.memory_counter % MEMORY_CAPACITY
+        self.memory[index, :] = np.hstack((board.reshape((1, 15*15)), dist.reshape((1, 15*15)), [[player, winner]]))
+        self.memory_counter += 1
+
+    def learn(self):
+        memory_size = min(MEMORY_CAPACITY, self.memory_counter)
+
+        sample_index = np.random.choice(memory_size, BATCH_SIZE)
+        batch_memory = self.memory[sample_index, :]
+        batch_state = batch_memory[:, :15*15]
+        batch_player = batch_memory[:, 2*15*15:2*15*15+1]
+        batch_input = torch.stack([utils.trans_to_input(batch_state[i].reshape(15, 15), batch_player[i])
+                                   for i in range(BATCH_SIZE)]).view(BATCH_SIZE, 3, 15, 15)
+        batch_dist = torch.from_numpy(batch_memory[:, 15*15:2*15*15])
+        batch_winner = torch.from_numpy(batch_memory[:, 2*15*15+1:])
+
+        value, prob = self.net(batch_input)
+        batch_output = nn.functional.softmax(prob, dim=1)
+
+        mse = self.loss_mse(value, batch_winner)
+        entropy_cross_loss = -torch.mean(torch.sum(batch_dist * torch.log(batch_output), 1))
+        loss = mse + entropy_cross_loss
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return mse.item(), entropy_cross_loss.item()
+
+    def eval(self, x):  # use in MCTS
+        with torch.no_grad():
+            value, output = self.net(x)
+        return value, nn.functional.softmax(output, dim=1)
 ```
 
-### v1.1
+#### MCTS
+包含三個部分：Node、Edge 和 MCTS 主體。
 
-> 介面上標示最後落子的位置，提高操作方便性。  
-> 記憶 heuristic ，棋盤發生變更時只做微量的更新，不再需要重新全局計算。  
-> 改善 heuristic 實作，增加 pruning 的數量。
+###### mcts.py
+```python
+class Node:
+    def __init__(self, edge, player):
+        self.edge_from = edge
+        self.player = player
+        self.edges_away = {}
+        self.counter = 0
 
-_critical 函數用於判斷在一方向上連接或阻斷的 heuristic。  
-使用數字代表棋型，在利用函數 _shape_h 得到分數。
-###### tastboard.cpp
-```c++
-bool Test_Board::occupy(int player, Coord coord)
-{
-  if(!Simple_Board::occupy(player, coord))
-    return false;
+    def add_child(self, action, prior):  # create new Edge without new child Node
+        self.edges_away[action] = Edge(self, action, prior)
 
-  _position_h[coord_trans(coord)] = 0;
-  _update_position_h(coord);
+    def get_child(self, action):
+        child, _ = self.edges_away[action].get()
+        return child
 
-  return true;
-}
+    def backup(self, value):  # backpropagation
+        self.counter += 1
+        if self.edge_from:
+            self.edge_from.backup(value)
 
-void Test_Board::remove(Coord coord)
-{
-  if(valid_coord(coord))
-    if (occupied[coord_trans(coord)] != -1)
-    {
-      occupied[coord_trans(coord)] = -1;
-      _position_h[coord_trans(coord)] = _coord_heuristic(coord);
-      _update_position_h(coord);
-      --step_count;
-    }
-}
+    def distribution(self, step):  # get distribution and select point
+        # set the temperature, which is used to controls the degree of exploration
+        if step < 20:
+            tau = 1
+        else:
+            tau = 1/step
 
-int Test_Board::_critical(Coord coord, Direction dir, bool connec) const
-{
-  int target = !connec ? _owner : !_owner;
+        dist = np.zeros((15, 15))
+        actions_pool = []
+        actions_dist = []
+        for edge in self.edges_away.values():
+            if edge.counter != 0:
+                tmp = np.float_power(edge.counter, 1 / tau)
+                dist[edge.action[0], edge.action[1]] = tmp
+                actions_pool.append(edge.action)
+                actions_dist.append(tmp)
 
-  int i = 0, chance = 2;
-  int shape_front = 0;
-  Coord stunt_coord = coord - dir;
-  // front of direction
-  while(i < 4 && chance)
-  {
-    if(!valid_coord(stunt_coord) ||
-       (occupied[coord_trans(stunt_coord)] == target))
-    {
-      shape_front += pow(10, i); // 1 means block
-      break;
-    }
-    else if(occupied[coord_trans(stunt_coord)] == -1)
-    {
-      shape_front += pow(10, i) * 2; // 2 means blank
-      --chance;
-    }
+        denominator = np.sum(dist)
+        dist /= denominator
+        actions_dist = [value/denominator for value in actions_dist]
 
-    ++i;
-    stunt_coord = stunt_coord - dir;
-  }
+        # since the program is run in multiprocessing, we need to set the seed
+        np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))  
+        action_idx = np.random.choice(len(actions_pool), p=actions_dist)
+        action = actions_pool[action_idx]
 
-  if(shape_front == 0) // already form a 活四 or 沖四
-    return 10000;
+        return action, dist
 
-  // back of direction
-  i = 0;
-  chance = 2;
-  stunt_coord = coord + dir;
-  int shape_back = 3; // 3 means the coord's position
-  while(i < 4 && chance)
-  {
-    shape_back *= 10;
+    def policy(self, add_noise=False):  # choose action under UCT
+        ucb_max = -sys.maxsize
+        choose_edge = None
 
-    if(!valid_coord(stunt_coord) ||
-       (occupied[coord_trans(stunt_coord)] == target))
-    {
-      shape_back += 1;
-      break;
-    }
-    else if(occupied[coord_trans(stunt_coord)] == -1)
-    {
-      shape_back += 2;
-      --chance;
-    }
+        if add_noise:
+            noise = np.random.dirichlet(.2*np.ones(len(self.edges_away)))  # use Dirichlet create noise
+        else:
+            noise = np.zeros(len(self.edges_away))
 
-    ++i;
-    stunt_coord = stunt_coord + dir;
-  }
+        i = 0
+        for edge in self.edges_away.values():
+            ucb = edge.ucb(noise[i])
+            i += 1
+            if ucb > ucb_max:
+                ucb_max = ucb
+                choose_edge = edge
 
-  if(shape_back == 30000)
-    return 10000;
+        choose_node, expand = choose_edge.get()
+        return choose_edge.action, choose_node, expand
 
-  int shape = shape_front * pow(10, ceil(log10(shape_back))) + shape_back;
 
-  return _shape_h(shape);
-}
+class Edge:
+    # let action be a tuple, so we can use it be the key of dictionary
+    def __init__(self, node_from, action: tuple, prior):
+        self.node_from = node_from
+        self.action = action
+        self.prior = prior
+        self.counter = 0
+        self.value = 0.0
+        self.node_to = None
+
+    def get(self):
+        self.counter += 1
+        if self.node_to:
+            return self.node_to, False
+        else:
+            self.node_to = Node(self, -self.node_from.player)
+            return self.node_to, True
+
+    def backup(self, value):
+        self.value += value
+        self.node_from.backup(-value)
+
+    def ucb(self, noise=0):
+        q = self.value/self.counter if self.counter else 0
+
+        if noise:
+            return q + C_PUCT * (.8*self.prior + .2*noise) * np.sqrt(self.node_from.counter) / (self.counter+1)
+        else:
+            return q + C_PUCT * self.prior * np.sqrt(self.node_from.counter) / (self.counter + 1)
+
+
+class MCTS:
+    def __init__(self, neural_network, index):
+        self.curr_node = Node(None, 1)
+        self.nn = neural_network
+        self.main_game, self.simulate_game = game.Gobang(), game.Gobang()
+
+    def step(self, action):
+        node_ = self.curr_node.get_child(action)
+        node_.edge_from = None  # it's no need, release memory
+        return node_
+
+    def simulation(self):
+        for _ in range(SIMULATION_ITER):
+            self.simulate_game.set(boarder_board=self.main_game.curr_board(True),
+                                   curr_player=self.main_game.curr_player,
+                                   steps=self.main_game.steps)
+
+            node = self.curr_node
+            state = self.simulate_game.curr_board()
+            expand, end = False, False
+            while not end and not expand:
+                if len(node.edges_away) == 0:
+                    _, state_prob = self.nn.eval(utils.trans_to_input(state, self.simulate_game.curr_player))
+                    for action in self.simulate_game.actions():
+                        node.add_child(action=(action[0], action[1]),
+                                       prior=state_prob[0, action[0]*15 + action[1]])
+
+                # add noise when select in root node
+                choose_action, node, expand = node.policy(node == self.curr_node)
+
+                end, state = self.simulate_game.place_chess(choose_action)
+
+            if end:
+                node.backup(1)
+            elif expand:
+                v, _ = self.nn.eval(utils.trans_to_input(state, self.simulate_game.curr_player))
+                node.backup(v)
+
+    def game(self):
+        end = False
+        states = []
+        dists = []
+        state = np.zeros((15, 15))
+        step = 0
+        while not end:
+            self.simulation()
+
+            states.append(state)
+            action, dist = self.curr_node.distribution(step)
+            dists.append(dist)
+
+            end, state = self.main_game.place_chess(action)
+            self.curr_node = self.step(action)
+            step += 1
+
+        if self.main_game.steps % 2 == 1:
+            winner = 1
+        else:
+            winner = -1
+
+        player = 1
+
+        for i in range(len(states)):
+            self.nn.store_experience(states[i], dists[i], player, winner)
+            player *= -1
 ```
