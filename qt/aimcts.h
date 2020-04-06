@@ -19,7 +19,7 @@ class Node
 
 public:
   Node(Edge *edge_from, int player);
-  void add_child(Coord coord, float priority);
+  void add_child(Coord coord, float prior);
   Node *get_child(Coord coord) const;
   void backup(float value);
   Coord choose_action() const;
@@ -49,7 +49,7 @@ public:
 private:
   Node *node_from{nullptr};
   Node *node_away{nullptr};
-  float priority{0};
+  float prior{0};
   float value{0};
   int counter{0};
 };

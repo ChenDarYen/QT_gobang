@@ -15,9 +15,9 @@ int SIMULATION_ITER = 400;
 Node::Node(Edge *edge_from, int player): edge_from(edge_from),
                                          player(player) {}
 
-void Node::add_child(Coord coord, float priority)
+void Node::add_child(Coord coord, float prior)
 {
-  edges_away[coord] = new Edge(this, priority);
+  edges_away[coord] = new Edge(this, prior);
 }
 
 Node *Node::get_child(Coord coord) const
@@ -88,8 +88,8 @@ bool Node::_compare_coord(const Coord &c1, const Coord &c2)
 
 // Edge
 
-Edge::Edge(Node *node_from, float priority) : node_from(node_from),
-                                                         priority(priority) {}
+Edge::Edge(Node *node_from, float prior) : node_from(node_from),
+                                           prior(prior) {}
 
 tuple<Node*, bool> Edge::get()
 {
@@ -112,7 +112,7 @@ void Edge::backup(float value)
 float Edge::ucb() const
 {
   float q = counter ? value / counter : 0;
-  return q + C_PUCT * priority * sqrt(node_from->counter) / (counter+1);
+  return q + C_PUCT * prior * sqrt(node_from->counter) / (counter+1);
 }
 
 Edge::~Edge()

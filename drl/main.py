@@ -49,9 +49,9 @@ def train(_, network, lock, loss_record):
     print([mse_total/100, cross_entropy_total/100])
 
     if loss_record.size() % 50 == 0:
-        network.save_state("{}state_{}.pkl".format(STATE_SAVE_FOLDER, game_index+int(BASE)))
+        network.save_state("{}state_{}.pkl".format(STATE_SAVE_FOLDER, loss_record.size()))
         network.save_memory("memory.npy")
-        loss_record.save("loss_record_{}.pkl")
+        loss_record.save("loss_record_{}.pkl".format(BASE))
 
     print('{} learn end'.format(game_index))
     lock.release()

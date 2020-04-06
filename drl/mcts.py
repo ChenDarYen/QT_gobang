@@ -5,7 +5,7 @@ import sys
 import os
 
 C_PUCT = .1
-SIMULATION_ITER = 500
+SIMULATION_ITER = 400
 
 
 class Node:
@@ -15,8 +15,8 @@ class Node:
         self.edges_away = {}
         self.counter = 0
 
-    def add_child(self, action, priority):
-        self.edges_away[action] = Edge(self, action, priority)
+    def add_child(self, action, prior):
+        self.edges_away[action] = Edge(self, action, prior)
 
     def get_child(self, action):
         child, _ = self.edges_away[action].get()
@@ -54,7 +54,7 @@ class Node:
 
         return action, dist
 
-    def policy(self, add_noise=False):  # choose action under UCB
+    def policy(self, add_noise=False):  # choose action under UCT
         ucb_max = -sys.maxsize
         choose_edge = None
 
@@ -76,11 +76,11 @@ class Node:
 
 
 class Edge:
-    # let action be a tuple, so we can use it on key of dictionary
-    def __init__(self, node_from, action: tuple, priority):
+    # let action be a tuple, so we can use it be the key of dictionary
+    def __init__(self, node_from, action: tuple, prior):
         self.node_from = node_from
         self.action = action
-        self.priority = priority
+        self.prior = prior
         self.counter = 0
         self.value = 0.0
         self.node_to = None
@@ -101,9 +101,9 @@ class Edge:
         q = self.value/self.counter if self.counter else 0
 
         if noise:
-            return q + C_PUCT * (.8*self.priority + .2*noise) * np.sqrt(self.node_from.counter) / (self.counter+1)
+            return q + C_PUCT * (.8*self.prior + .2*noise) * np.sqrt(self.node_from.counter) / (self.counter+1)
         else:
-            return q + C_PUCT * self.priority * np.sqrt(self.node_from.counter) / (self.counter + 1)
+            return q + C_PUCT * self.prior * np.sqrt(self.node_from.counter) / (self.counter + 1)
 
 
 class MCTS:
@@ -112,10 +112,6 @@ class MCTS:
         self.nn = neural_network
         self.main_game, self.simulate_game = game.Gobang(), game.Gobang()
         self.index = index
-
-    def renew(self):
-        self.curr_node = Node(None, 1)
-        self.main_game.new_game()
 
     def step(self, action):
         node_ = self.curr_node.get_child(action)
@@ -136,13 +132,10 @@ class MCTS:
                     _, state_prob = self.nn.eval(utils.trans_to_input(state, self.simulate_game.curr_player))
                     for action in self.simulate_game.actions():
                         node.add_child(action=(action[0], action[1]),
-                                       priority=state_prob[0, action[0]*15 + action[1]])
+                                       prior=state_prob[0, action[0]*15 + action[1]])
 
                 # add noise when select in root node
-                if node == self.curr_node:
-                    choose_action, node, expand = node.policy(True)
-                else:
-                    choose_action, node, expand = node.policy()
+                choose_action, node, expand = node.policy(node == self.curr_node)
 
                 end, state = self.simulate_game.place_chess(choose_action)
 
