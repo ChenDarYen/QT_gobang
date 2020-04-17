@@ -101,7 +101,7 @@ void BoardView::paintEvent(QPaintEvent*)
   Coord black_latest, white_latest;
   _model->latest_move(&black_latest, &white_latest);
 
-  if(black_latest.x != 0)
+  if(black_latest.x != -1)
   {
     QPen highlight(Qt::red, W * 2, Qt::SolidLine);
     painter.setPen(highlight);
@@ -116,7 +116,7 @@ void BoardView::paintEvent(QPaintEvent*)
                      (.5 + black_latest.y) * _lattice_width + 3 * W);
   }
 
-  if(white_latest.x != 0)
+  if(white_latest.x != -1)
   {
     QPen highlight(Qt::darkGreen, W * 2, Qt::SolidLine);
     painter.setPen(highlight);

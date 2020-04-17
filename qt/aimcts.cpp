@@ -41,7 +41,8 @@ Coord Node::choose_action() const
   for(auto &[action, edge] : edges_away)
     if(edge->counter)
     {
-      float tmp = edge->value / edge->counter;
+      float tmp = edge->counter;
+      qDebug() << action.x << ", " << action.y << ": " << tmp;
       if(tmp > max_tmp)
       {
         max_tmp = tmp;
@@ -52,7 +53,7 @@ Coord Node::choose_action() const
   return choice;
 }
 
-tuple<Coord, Node*, bool> Node::policy() const
+tuple<Coord, Node*, bool> Node::policy(bool root) const
 {
   float ucb_max = INT_MIN;
   Edge *choose_edge;
@@ -61,6 +62,8 @@ tuple<Coord, Node*, bool> Node::policy() const
   for(auto &[action, edge] : edges_away)
   {
     float ucb = edge->ucb();
+    if(root)
+      qDebug() << action.x << ", " << action.y << ": " << ucb;
     if(ucb > ucb_max)
     {
       ucb_max = ucb;
@@ -156,6 +159,16 @@ void AIMCTS::simulation()
     {
       if(node->edges_away.size() == 0)
       {
+        for(int i = 0; i < 10; ++i)
+        {
+          if(node == _curr_node)
+          {
+            vector<torch::jit::IValue> i{torch::ones({1,3,15,15})};
+            auto o = _model.forward(i).toTuple()->elements()[0].toTensor().data_ptr<float>();
+            qDebug() << double(*o);
+          }
+        }
+
         vector<torch::jit::IValue> input{_trans_to_input(board, node->player)};
         auto prob = torch::softmax(_model.forward(input).toTuple()->elements()[1].toTensor(), 1)
                     .data_ptr<float>();

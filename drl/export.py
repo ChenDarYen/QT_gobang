@@ -14,10 +14,14 @@ def export(load_state_path, model_save_path):
     output_value, output_prob = model(tmp_input)
     output_value_, output_prob_ = traced_script_model(tmp_input)
 
+    n = np.ones((1, 3, 15, 15), dtype=np.float32)
+    i = torch.from_numpy(n)
+    print(traced_script_model(i))
+
     np.testing.assert_allclose(output_value.detach().numpy(), output_value_.detach().numpy())
     np.testing.assert_allclose(output_prob.detach().numpy(), output_prob_.detach().numpy())
 
     traced_script_model.save(model_save_path)
 
 
-export('state/model_600.pkl', 'traced_model/model_600.pt')
+export('state/state_500.pkl', '../model/model_500.pt')

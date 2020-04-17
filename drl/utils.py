@@ -10,7 +10,7 @@ def trans_to_input(state, curr_player):
     else:
         f1 = np.array(state < 0)
         f2 = np.array(state > 0)
-        f3 = np.ones((15, 15))
+        f3 = np.zeros((15, 15))
 
     return torch.unsqueeze(torch.from_numpy(np.stack([f1, f2, f3])).float(), 0)
 

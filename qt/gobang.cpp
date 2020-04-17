@@ -172,13 +172,13 @@ void Gobang::play(int code)
   // _window->showModeDialog(&mode, content);
 
   (_board)->init();
-  _latest_black_move.x = _latest_black_move.y = 0;
-  _latest_white_move.x = _latest_white_move.y = 0;
+  _latest_black_move.x = _latest_black_move.y = -1;
+  _latest_white_move.x = _latest_white_move.y = -1;
 
   _board_view->update();
 
   // mode 0 means AI vs. AI, 1 means player is black, 2 means player is white
-  auto AI = make_shared<AIMCTS>("../../../model/model_100.pt");
+  auto AI = make_shared<AIMCTS>("../../../model/model_500.pt");
   switch(mode)
   {
     case 0:

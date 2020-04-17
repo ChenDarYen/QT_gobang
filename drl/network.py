@@ -73,7 +73,7 @@ class Model(BaseModel, ValueModel, ProbModel):
 
 
 class NeuralNetwork:
-    def __init__(self, state_file_path=None):
+    def __init__(self, state_file_path=None, memory_path=None, count=0):
         self.net = Model()
         if state_file_path:
             self.net.load_state_dict(torch.load(state_file_path))
@@ -81,11 +81,17 @@ class NeuralNetwork:
         self.optimizer = torch.optim.SGD(self.net.parameters(), lr=LR, momentum=.9, weight_decay=1e-4)
         self.loss_mse = nn.MSELoss()
 
-        # each experience contains board, distribution, player, winner
-        self.memory = np.zeros((MEMORY_CAPACITY, 15*15*2+2), dtype=np.float32)
-        self.memory_counter = 0
+        # each experience contains board, distribution, player, winner, and index
+        if memory_path:
+            self.memory = np.load(memory_path)
+        else:
+            self.memory = np.zeros((MEMORY_CAPACITY, 15*15*2+3), dtype=np.float32)
 
-        self.counter = 0
+        self.memory_counter = np.argmax(self.memory[:, 15*15*2+2])
+        if self.memory_counter != 0:
+            self.memory_counter += 1
+
+        self.counter = count
 
     def count(self):
         self.counter += 1
@@ -99,7 +105,9 @@ class NeuralNetwork:
 
     def store_experience(self, board, dist, player, winner):
         index = self.memory_counter % MEMORY_CAPACITY
-        self.memory[index, :] = np.hstack((board.reshape((1, 15*15)), dist.reshape((1, 15*15)), [[player, winner]]))
+        self.memory[index, :] = np.hstack((board.reshape((1, 15*15)),
+                                           dist.reshape((1, 15*15)),
+                                           [[player, winner, self.memory_counter]]))
         self.memory_counter += 1
 
     def learn(self):
@@ -108,11 +116,11 @@ class NeuralNetwork:
         sample_index = np.random.choice(memory_size, BATCH_SIZE)
         batch_memory = self.memory[sample_index, :]
         batch_state = batch_memory[:, :15*15]
-        batch_player = batch_memory[:, 2*15*15:2*15*15+1]
+        batch_player = batch_memory[:, 2*15*15]
         batch_input = torch.stack([utils.trans_to_input(batch_state[i].reshape(15, 15), batch_player[i])
                                    for i in range(BATCH_SIZE)]).view(BATCH_SIZE, 3, 15, 15)
         batch_dist = torch.from_numpy(batch_memory[:, 15*15:2*15*15])
-        batch_winner = torch.from_numpy(batch_memory[:, 2*15*15+1:])
+        batch_winner = torch.from_numpy(batch_memory[:, 2*15*15+1]).unsqueeze(dim=1)
 
         value, prob = self.net(batch_input)
         batch_output = nn.functional.softmax(prob, dim=1)
@@ -131,6 +139,3 @@ class NeuralNetwork:
         with torch.no_grad():
             value, output = self.net(x)
         return value, nn.functional.softmax(output, dim=1)
-
-    def memory_full(self):
-        return self.memory_counter >= MEMORY_CAPACITY

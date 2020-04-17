@@ -23,7 +23,7 @@ public:
   Node *get_child(Coord coord) const;
   void backup(float value);
   Coord choose_action() const;
-  std::tuple<Coord, Node*, bool> policy() const;
+  std::tuple<Coord, Node*, bool> policy(bool root=false) const;
   ~Node();
 
 private:
