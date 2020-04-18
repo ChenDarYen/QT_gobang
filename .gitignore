@@ -1,0 +1,9 @@
+dist
+drl/__pycache__
+drl/.idea
+qt/*.autosave
+QT_Debug
+QT_Release
+drl/state/*.pkl
+drl/state-resnet/*.pkl
+.DS_Store

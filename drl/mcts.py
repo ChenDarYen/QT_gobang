@@ -4,8 +4,9 @@ import utils
 import sys
 import os
 
-C_PUCT = .1
+C_PUCT = .2
 SIMULATION_ITER = 400
+ALPHA = .03  # use in Dirichlet noise
 
 
 class Node:
@@ -59,7 +60,8 @@ class Node:
         choose_edge = None
 
         if add_noise:
-            noise = np.random.dirichlet(.2*np.ones(len(self.edges_away)))
+            np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
+            noise = np.random.dirichlet(np.full(len(self.edges_away), ALPHA))
         else:
             noise = np.zeros(len(self.edges_away))
 
@@ -161,7 +163,7 @@ class MCTS:
             end, state = self.main_game.place_chess(action)
             self.curr_node = self.step(action)
             step += 1
-            print('{} place'.format(self.index))
+            print('{} place {}, {}'.format(self.index, action[0], action[1]))
 
         if self.main_game.steps % 2 == 1:
             winner = 1
