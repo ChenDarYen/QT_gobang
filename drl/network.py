@@ -6,6 +6,7 @@ import utils
 BATCH_SIZE = 50
 LR = .001
 GAMMA = .9
+DELTA = 1e-7
 MEMORY_CAPACITY = 1000
 
 
@@ -126,7 +127,7 @@ class NeuralNetwork:
         batch_output = nn.functional.softmax(prob, dim=1)
 
         mse = self.loss_mse(value, batch_winner)
-        entropy_cross_loss = -torch.mean(torch.sum(batch_dist * torch.log(batch_output), 1))
+        entropy_cross_loss = -torch.mean(torch.sum(batch_dist * torch.log(batch_output+DELTA), 1))
         loss = mse + entropy_cross_loss
 
         self.optimizer.zero_grad()

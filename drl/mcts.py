@@ -4,9 +4,8 @@ import utils
 import sys
 import os
 
-C_PUCT = .2
+C_PUCT = .1
 SIMULATION_ITER = 400
-ALPHA = .03  # use in Dirichlet noise
 
 
 class Node:
@@ -61,7 +60,7 @@ class Node:
 
         if add_noise:
             np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-            noise = np.random.dirichlet(np.full(len(self.edges_away), ALPHA))
+            noise = np.random.dirichlet(.2*np.ones(len(self.edges_away)))
         else:
             noise = np.zeros(len(self.edges_away))
 

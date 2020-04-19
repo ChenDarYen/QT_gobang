@@ -1,5 +1,5 @@
 import mcts
-import network_resnet
+import network
 import utils
 import pickle
 import numpy as np
@@ -10,8 +10,6 @@ from functools import partial
 import time
 
 STATE_SAVE_FOLDER = 'state/'
-TRAINING_STEP = 200
-SAVE_INTERVAL = 25
 
 
 class LossRecord:
@@ -50,14 +48,14 @@ def train(_, network, lock, loss_record):
 
     mse_total, cross_entropy_total = 0, 0
     np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-    for _ in range(TRAINING_STEP):
+    for _ in range(100):
         mse, cross_entropy = network.learn()
         mse_total += mse
         cross_entropy_total += cross_entropy
-    loss_record.add([mse_total/TRAINING_STEP, cross_entropy_total/TRAINING_STEP])
-    print([mse_total/TRAINING_STEP, cross_entropy_total/TRAINING_STEP])
+    loss_record.add([mse_total/100, cross_entropy_total/100])
+    print([mse_total/100, cross_entropy_total/100])
 
-    if loss_record.size() % SAVE_INTERVAL == 0:
+    if loss_record.size() % 25 == 0:
         print('save')
         network.save_state("{}state_{}.pkl".format(STATE_SAVE_FOLDER, loss_record.size()))
         network.save_memory("memory.npy")
@@ -78,13 +76,15 @@ def train(_, network, lock, loss_record):
 
 
 if __name__ == '__main__':
-    BaseManager.register('NN_resnet', callable=network_resnet.NeuralNetwork)
+    BaseManager.register('NN', callable=network.NeuralNetwork)
     BaseManager.register('LossRecord', callable=LossRecord)
     manager = BaseManager()
     manager.start()
 
-    loss_record = manager.LossRecord()
-    neural_network = manager.NN_resnet()
+    # loss_record = manager.LossRecord()
+    # neural_network = manager.NN()
+    loss_record = manager.LossRecord('loss_record.pkl')
+    neural_network = manager.NN('state/state_1450.pkl', 'memory.npy', loss_record.size())
 
     m = Manager()
     lock = m.Lock()
@@ -94,5 +94,5 @@ if __name__ == '__main__':
                             lock=lock,
                             loss_record=loss_record)
 
-    pool = Pool()
-    pool.map(partial_train, range(1000))
+    pool = Pool(4)
+    pool.map(partial_train, range(700))
