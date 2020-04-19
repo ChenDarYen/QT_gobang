@@ -1,6 +1,8 @@
 import network
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
+import pickle
 
 
 def export(load_state_path, model_save_path):
@@ -24,4 +26,14 @@ def export(load_state_path, model_save_path):
     traced_script_model.save(model_save_path)
 
 
-export('state/state_500.pkl', '../model/model_500.pt')
+def export_loss(path):
+    file = open(path, 'rb')
+    record = np.array(pickle.load(file))
+    file.close()
+
+    plt.plot(record[:, 1])
+    plt.show()
+
+
+export_loss('loss_record_resnet.pkl')
+# export('state/state_500.pkl', '../model/model_500.pt')
