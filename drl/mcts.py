@@ -103,9 +103,9 @@ class Edge:
         q = self.value/self.counter if self.counter else 0
 
         if noise:
-            return q + C_PUCT * (.8*self.prior + .2*noise) * np.sqrt(self.node_from.counter) / (self.counter+1)
+            return q + C_PUCT * (.8*self.prior + .2*noise) * np.sqrt(self.node_from.counter+1) / (self.counter+1)
         else:
-            return q + C_PUCT * self.prior * np.sqrt(self.node_from.counter) / (self.counter + 1)
+            return q + C_PUCT * self.prior * np.sqrt(self.node_from.counter+1) / (self.counter + 1)
 
 
 class MCTS:
