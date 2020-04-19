@@ -5,5 +5,5 @@ qt/*.autosave
 QT_Debug
 QT_Release
 drl/state/*.pkl
-drl/state-resnet/*.pkl
+drl/state_resnet/*.pkl
 .DS_Store

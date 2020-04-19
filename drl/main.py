@@ -9,7 +9,7 @@ from multiprocessing.managers import BaseManager
 from functools import partial
 import time
 
-STATE_SAVE_FOLDER = 'state/'
+STATE_SAVE_FOLDER = 'state_resnet/'
 TRAINING_STEP = 200
 SAVE_INTERVAL = 25
 
@@ -60,8 +60,8 @@ def train(_, network, lock, loss_record):
     if loss_record.size() % SAVE_INTERVAL == 0:
         print('save')
         network.save_state("{}state_{}.pkl".format(STATE_SAVE_FOLDER, loss_record.size()))
-        network.save_memory("memory.npy")
-        loss_record.save("loss_record.pkl")
+        network.save_memory("memory_resnet.npy")
+        loss_record.save("loss_record_resnet.pkl")
 
     print('{} learn end'.format(game_index))
     lock.release()
@@ -83,8 +83,8 @@ if __name__ == '__main__':
     manager = BaseManager()
     manager.start()
 
-    loss_record = manager.LossRecord()
-    neural_network = manager.NN_resnet()
+    loss_record = manager.LossRecord('loss_record_resnet.pkl')
+    neural_network = manager.NN_resnet('state_resnet/state_200.pkl', 'memory_resnet.npy', loss_record.size())
 
     m = Manager()
     lock = m.Lock()
