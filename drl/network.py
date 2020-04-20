@@ -87,7 +87,7 @@ class NeuralNetwork:
         else:
             self.memory = np.zeros((MEMORY_CAPACITY, 15*15*2+3), dtype=np.float32)
 
-        self.memory_counter = np.argmax(self.memory[:, 15*15*2+2])
+        self.memory_counter = int(np.max(self.memory[:, 15*15*2+2]))
         if self.memory_counter != 0:
             self.memory_counter += 1
 
