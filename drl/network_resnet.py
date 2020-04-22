@@ -5,7 +5,7 @@ import utils
 
 BATCH_SIZE = 32
 FEATURES = 30
-LR = 0.01
+LR = 0.005
 GAMMA = .9
 DELTA = 1e-7
 MEMORY_CAPACITY = 1000
