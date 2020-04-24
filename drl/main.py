@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # loss_record = manager.LossRecord()
     # neural_network = manager.NN_resnet()
     loss_record = manager.LossRecord('loss_record_resnet.pkl')
-    neural_network = manager.NN_resnet('state_resnet/state_350.pkl', 'memory_resnet.npy', loss_record.size())
+    neural_network = manager.NN_resnet('state_resnet/state_450.pkl', 'memory_resnet.npy', loss_record.size())
 
     m = Manager()
     lock = m.Lock()
